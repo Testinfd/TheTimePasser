@@ -1,5 +1,3 @@
-# Clone Code Credit 
-
 import sys, glob, importlib, logging, logging.config, pytz, asyncio
 from pathlib import Path
 
