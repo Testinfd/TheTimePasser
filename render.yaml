@@ -1,0 +1,10 @@
+services:
+  - type: web
+    name: the-filter-bot
+    env: python
+    region: ohio
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: python3 bot.py
+    runtime: python
+    pythonVersion: 3.10.8 
