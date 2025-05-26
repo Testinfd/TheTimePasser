@@ -84,4 +84,14 @@ When {} unique users join through your link, you'll automatically receive premiu
 👥 Cast: {cast}
 🎬 Director: {director}
 
-📖 Plot: {plot}</b>""" 
+📖 Plot: {plot}</b>"""
+
+    LOG_TEXT_P = """<b>#NEW_USER
+
+User: {}
+ID: {}</b>"""
+
+    LOG_TEXT_G = """<b>#NEW_GROUP
+
+Group: {}
+ID: {}</b>""" 

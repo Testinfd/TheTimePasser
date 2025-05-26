@@ -3,7 +3,7 @@
 import os, string, logging, random, asyncio, time, datetime, re, sys, json, base64
 from Script import script
 from pyrogram import Client, filters, enums
-from pyrogram.errors import ChatAdminRequired, FloodWait
+from pyrogram.errors import ChatAdminRequired, FloodWait, WebpageCurlFailed
 from pyrogram.types import *
 from database.ia_filterdb import col, sec_col, get_file_details, unpack_new_file_id, get_bad_files
 from database.users_chats_db import db, delete_all_referal_users, get_referal_users_count, get_referal_all_users, referal_add_user
@@ -77,12 +77,20 @@ async def start(client, message):
         m=await message.reply_sticker("CAACAgUAAxkBAAEKVaxlCWGs1Ri6ti45xliLiUeweCnu4AACBAADwSQxMYnlHW4Ls8gQMAQ") 
         await asyncio.sleep(1)
         await m.delete()
-        await message.reply_photo(
-            photo=random.choice(PICS),
-            caption=script.START_TXT.format(message.from_user.mention, temp.U_NAME, temp.B_NAME),
-            reply_markup=reply_markup,
-            parse_mode=enums.ParseMode.HTML
-        )
+        try:
+            await message.reply_photo(
+                photo=random.choice(PICS),
+                caption=script.START_TXT.format(message.from_user.mention, temp.U_NAME, temp.B_NAME),
+                reply_markup=reply_markup,
+                parse_mode=enums.ParseMode.HTML
+            )
+        except WebpageCurlFailed:
+            logger.warning(f"WebpageCurlFailed: Could not send start photo. PICS: {PICS}. Sending text message instead.")
+            await message.reply_text(
+                script.START_TXT.format(message.from_user.mention, temp.U_NAME, temp.B_NAME),
+                reply_markup=reply_markup,
+                parse_mode=enums.ParseMode.HTML
+            )
         return
     
     if AUTH_CHANNEL and not await is_subscribed(client, message):
@@ -160,12 +168,20 @@ async def start(client, message):
         if CLONE_MODE == True:
             buttons.append([InlineKeyboardButton('ᴄʀᴇᴀᴛᴇ ᴏᴡɴ ᴄʟᴏɴᴇ ʙᴏᴛ', callback_data='clone')])
         reply_markup = InlineKeyboardMarkup(buttons)      
-        await message.reply_photo(
-            photo=random.choice(PICS),
-            caption=script.START_TXT.format(message.from_user.mention, temp.U_NAME, temp.B_NAME),
-            reply_markup=reply_markup,
-            parse_mode=enums.ParseMode.HTML
-        )
+        try:
+            await message.reply_photo(
+                photo=random.choice(PICS),
+                caption=script.START_TXT.format(message.from_user.mention, temp.U_NAME, temp.B_NAME),
+                reply_markup=reply_markup,
+                parse_mode=enums.ParseMode.HTML
+            )
+        except WebpageCurlFailed:
+            logger.warning(f"WebpageCurlFailed: Could not send start photo (auth flow). PICS: {PICS}. Sending text message instead.")
+            await message.reply_text(
+                script.START_TXT.format(message.from_user.mention, temp.U_NAME, temp.B_NAME),
+                reply_markup=reply_markup,
+                parse_mode=enums.ParseMode.HTML
+            )
         return
     data = message.command[1]
     if data.split("-", 1)[0] == "VJ":
@@ -218,12 +234,20 @@ async def start(client, message):
             m=await message.reply_sticker("CAACAgUAAxkBAAEKVaxlCWGs1Ri6ti45xliLiUeweCnu4AACBAADwSQxMYnlHW4Ls8gQMAQ") 
             await asyncio.sleep(1)
             await m.delete()
-            await message.reply_photo(
-                photo=random.choice(PICS),
-                caption=script.START_TXT.format(message.from_user.mention, temp.U_NAME, temp.B_NAME),
-                reply_markup=reply_markup,
-                parse_mode=enums.ParseMode.HTML
-            )
+            try:
+                await message.reply_photo(
+                    photo=random.choice(PICS),
+                    caption=script.START_TXT.format(message.from_user.mention, temp.U_NAME, temp.B_NAME),
+                    reply_markup=reply_markup,
+                    parse_mode=enums.ParseMode.HTML
+                )
+            except WebpageCurlFailed:
+                logger.warning(f"WebpageCurlFailed: Could not send start photo (auth flow). PICS: {PICS}. Sending text message instead.")
+                await message.reply_text(
+                    script.START_TXT.format(message.from_user.mention, temp.U_NAME, temp.B_NAME),
+                    reply_markup=reply_markup,
+                    parse_mode=enums.ParseMode.HTML
+                )
             return 
     try:
         pre, file_id = data.split('_', 1)
@@ -1351,17 +1375,26 @@ async def remove_premium_cmd_handler(client, message):
 async def plans_cmd_handler(client, message): 
     if PREMIUM_AND_REFERAL_MODE == False:
         return 
-    btn = [            
+    
+    photo_buttons = [
         [InlineKeyboardButton("ꜱᴇɴᴅ ᴘᴀʏᴍᴇɴᴛ ʀᴇᴄᴇɪᴘᴛ 🧾", url=OWNER_LNK)],
         [InlineKeyboardButton("⚠️ ᴄʟᴏsᴇ / ᴅᴇʟᴇᴛᴇ ⚠️", callback_data="close_data")]
     ]
-    reply_markup = InlineKeyboardMarkup(btn)
-    await message.reply_photo(
-        photo=PAYMENT_QR,
-        caption=PAYMENT_TEXT,
-        reply_markup=reply_markup
-    )
-        
+    text_fallback_buttons = [[ InlineKeyboardButton(text="📝 Send screenshot after payment 📝", url=OWNER_LNK) ]]
+
+    try:
+        await message.reply_photo(
+            photo=PAYMENT_QR,
+            caption=PAYMENT_TEXT,
+            reply_markup=InlineKeyboardMarkup(photo_buttons)
+        )
+    except WebpageCurlFailed:
+        logger.warning(f"WebpageCurlFailed: Could not send payment QR photo. PAYMENT_QR: {PAYMENT_QR}. Sending text message instead.")
+        await message.reply_text(
+            PAYMENT_TEXT,
+            reply_markup=InlineKeyboardMarkup(text_fallback_buttons)
+        )
+
 @Client.on_message(filters.command("myplan"))
 async def check_plans_cmd(client, message):
     if PREMIUM_AND_REFERAL_MODE == False:
