@@ -172,6 +172,30 @@ AUTO_APPROVE_MODE = bool(environ.get('AUTO_APPROVE_MODE', False)) # Set True or 
 # Start Command Reactions
 REACTIONS = ["🤝", "😇", "🤗", "😍", "👍", "🎅", "😐", "🥰", "🤩", "😱", "🤣", "😘", "👏", "😛", "😈", "🎉", "⚡️", "🫡", "🤓", "😎", "🏆", "🔥", "🤭", "🌚", "🆒", "👻", "😁"] #don't add any emoji because tg not support all emoji reactions
 
+# Missing variables that are imported in plugins/commands.py
+DOC_LINK_BUTTON = environ.get('DOC_LINK_BUTTON', '')
+TUTORIAL_LINK = environ.get('TUTORIAL_LINK', '')
+SHORT_API = environ.get('SHORT_API', '')
+SHORTLINK_TIMER = int(environ.get('SHORTLINK_TIMER', 0))
+BATCH_GIF = environ.get('BATCH_GIF', '')
+GIF_MODE = bool(environ.get('GIF_MODE', False))
+NORM_IMAGE = environ.get('NORM_IMAGE', '')
+HOW_TO_VERIFY = environ.get('HOW_TO_VERIFY', '')
+PREMIUM_URL = environ.get('PREMIUM_URL', '')
+SHORTNER_LINK = environ.get('SHORTNER_LINK', '')
+PREMIUM_CAPTION = environ.get('PREMIUM_CAPTION', '')
+PREMIUM_FILE_CAPTION = environ.get('PREMIUM_FILE_CAPTION', '')
+STREAM_LINK = environ.get('STREAM_LINK', '')
+START_LINK = environ.get('START_LINK', '')
+CUSTOM_PRE = environ.get('CUSTOM_PRE', '')
+REQ_MODE = bool(environ.get('REQ_MODE', False))
+FILE_MODE = bool(environ.get('FILE_MODE', False))
+TOGGLE_FILE_CAPTION = bool(environ.get('TOGGLE_FILE_CAPTION', False))
+WELCOME_NEW = environ.get('WELCOME_NEW', '')
+IS_WELCOME = bool(environ.get('IS_WELCOME', False))
+WELCOME_TEXT = environ.get('WELCOME_TEXT', '')
+UTUBE_THUMB = environ.get('UTUBE_THUMB', '')
+REMOVE_SECONDS = environ.get('REMOVE_SECONDS', 0)
 
 if MULTIPLE_DATABASE == False:
     USER_DB_URI = DATABASE_URI
