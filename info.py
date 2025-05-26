@@ -196,6 +196,7 @@ IS_WELCOME = bool(environ.get('IS_WELCOME', False))
 WELCOME_TEXT = environ.get('WELCOME_TEXT', '')
 UTUBE_THUMB = environ.get('UTUBE_THUMB', '')
 REMOVE_SECONDS = environ.get('REMOVE_SECONDS', 0)
+IS_SHORTLINK = bool(environ.get('IS_SHORTLINK', False))
 
 if MULTIPLE_DATABASE == False:
     USER_DB_URI = DATABASE_URI

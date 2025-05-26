@@ -1,408 +1,449 @@
-import csv, json, asyncio, io, logging
-import datetime
-from pyrogram import Client, filters, enums
-from pyrogram.types import InlineKeyboardButton, InlineKeyboardMarkup
-from info import ADMINS, CHANNELS, LOG_CHANNEL
-from database.ia_filterdb import col, sec_col, save_file, unpack_new_file_id
-from database.users_chats_db import db
-from pyrogram.errors import FloodWait, InputUserDeactivated, UserIsBlocked, PeerIdInvalid
+import logging
+import json
+import csv
+import os
+import asyncio
+from datetime import datetime
+from pyrogram import Client, filters
+from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+from main.bot import MainBot
+from info import ADMINS, DATABASE_NAME
+from database.db_helpers import get_mongo_client, get_async_mongo_client
+from database.analytics import analytics_db
 
-async def export_files_to_json(collection, file_path=None):
-    """Export files from MongoDB to JSON"""
-    cursor = collection.find({})
-    files = []
-    
-    # Convert MongoDB documents to JSON serializable dict
-    for doc in await cursor.to_list(None):
-        # Remove MongoDB-specific ID field if it exists
-        if "_id" in doc:
-            del doc["_id"]
-        files.append(doc)
-    
-    if file_path:
-        # Save to file
-        with open(file_path, 'w') as f:
-            json.dump(files, f, default=str, indent=2)
-    
-    return files
+logger = logging.getLogger(__name__)
 
-async def export_files_to_csv(collection, file_path=None):
-    """Export files from MongoDB to CSV"""
-    cursor = collection.find({})
-    files = await cursor.to_list(None)
-    
-    if not files:
-        return []
-    
-    # Get field names from the first document
-    fields = list(files[0].keys())
-    if "_id" in fields:
-        fields.remove("_id")  # Remove MongoDB ID
-    
-    # Convert to CSV
-    output = io.StringIO()
-    writer = csv.DictWriter(output, fieldnames=fields, extrasaction='ignore')
-    writer.writeheader()
-    
-    for doc in files:
-        # Convert ObjectId to string for CSV compatibility
-        row = {k: str(v) if k == "_id" else v for k, v in doc.items()}
-        writer.writerow(row)
-    
-    if file_path:
-        with open(file_path, 'w', newline='') as f:
-            f.write(output.getvalue())
-    
-    return output.getvalue()
-
-async def import_files_from_json(json_data, collection):
-    """Import files from JSON to MongoDB"""
-    if isinstance(json_data, str):
+class BulkOperations:
+    def __init__(self):
+        """Initialize bulk operations handler"""
+        self._client = get_async_mongo_client()
+        self.db = self._client[DATABASE_NAME]
+        self.files = self.db.files
+        self.temp_dir = "temp_exports"
+        
+        # Create temp directory if it doesn't exist
+        os.makedirs(self.temp_dir, exist_ok=True)
+        
+    async def export_to_json(self, query=None, limit=None):
+        """Export files to JSON format"""
         try:
-            files = json.loads(json_data)
-        except json.JSONDecodeError:
-            # Try reading from file path
-            with open(json_data, 'r') as f:
-                files = json.load(f)
-    else:
-        # Assume it's already a Python list/dict
-        files = json_data
-    
-    success_count = 0
-    error_count = 0
-    
-    for file_data in files:
-        try:
-            # Check if file already exists to avoid duplicates
-            existing = await collection.find_one({"file_id": file_data["file_id"]})
-            if not existing:
-                await collection.insert_one(file_data)
-                success_count += 1
+            # Get files based on query or get all
+            if query:
+                cursor = self.files.find(query)
             else:
-                error_count += 1
-        except Exception as e:
-            logging.error(f"Error importing file: {str(e)}")
-            error_count += 1
-    
-    return success_count, error_count
-
-async def import_files_from_csv(csv_data, collection):
-    """Import files from CSV to MongoDB"""
-    if isinstance(csv_data, str):
-        try:
-            # Check if it's CSV content or a file path
-            if '\n' in csv_data:
-                file_obj = io.StringIO(csv_data)
-            else:
-                file_obj = open(csv_data, 'r')
-        except:
-            return 0, 0
-    else:
-        # Assume it's a file-like object
-        file_obj = csv_data
-    
-    reader = csv.DictReader(file_obj)
-    files = list(reader)
-    
-    success_count = 0
-    error_count = 0
-    
-    for file_data in files:
-        try:
-            # Check if file already exists
-            existing = await collection.find_one({"file_id": file_data["file_id"]})
-            if not existing:
-                await collection.insert_one(file_data)
-                success_count += 1
-            else:
-                error_count += 1
-        except Exception as e:
-            logging.error(f"Error importing file from CSV: {str(e)}")
-            error_count += 1
-    
-    if isinstance(csv_data, str) and '\n' not in csv_data:
-        file_obj.close()
-    
-    return success_count, error_count
-
-# Add commands for the bot to use these features
-@Client.on_message(filters.command("exportfiles") & filters.user(ADMINS))
-async def export_all_files(bot, message):
-    """Command handler to export all files"""
-    chat_id = message.chat.id
-    # Send initial message
-    status = await message.reply("Exporting files... This may take some time.")
-    
-    try:
-        # Create a JSON file
-        temp_file = f"temp_export_{datetime.datetime.now().strftime('%Y%m%d%H%M%S')}.json"
-        
-        # Export from both collections if using multiple databases
-        files = await export_files_to_json(col, temp_file)
-        file_count = len(files)
-        
-        # Send the file to the admin
-        await bot.send_document(
-            chat_id=chat_id,
-            document=temp_file,
-            caption=f"Exported {file_count} files as JSON.",
-            file_name=f"filter_bot_files_{datetime.datetime.now().strftime('%Y%m%d')}.json"
-        )
-        
-        # Delete temp file
-        import os
-        if os.path.exists(temp_file):
-            os.remove(temp_file)
-        
-        await status.edit_text(f"Successfully exported {file_count} files.")
-    except Exception as e:
-        logging.error(f"Error exporting files: {str(e)}")
-        await status.edit_text(f"Error exporting files: {str(e)}")
-
-@Client.on_message(filters.command("importfiles") & filters.user(ADMINS) & filters.document)
-async def import_files_cmd(bot, message):
-    """Command handler to import files from a document"""
-    chat_id = message.chat.id
-    
-    # Check if there's a file attached
-    if not message.document:
-        await message.reply("Please attach a JSON or CSV file with the command.")
-        return
-    
-    # Send initial message
-    status = await message.reply("Importing files... This may take some time.")
-    
-    try:
-        # Download the file
-        file_path = await bot.download_media(message.document)
-        
-        # Check file type
-        if file_path.endswith('.json'):
-            success, errors = await import_files_from_json(file_path, col)
-        elif file_path.endswith('.csv'):
-            success, errors = await import_files_from_csv(file_path, col)
-        else:
-            await status.edit_text("Unsupported file format. Please use JSON or CSV.")
-            # Delete downloaded file
-            import os
-            if os.path.exists(file_path):
-                os.remove(file_path)
-            return
-        
-        # Delete downloaded file
-        import os
-        if os.path.exists(file_path):
-            os.remove(file_path)
-        
-        await status.edit_text(f"Import completed: {success} files imported successfully, {errors} errors.")
-    except Exception as e:
-        logging.error(f"Error importing files: {str(e)}")
-        await status.edit_text(f"Error importing files: {str(e)}")
-
-async def fetch_batch_file_info(bot, channel_id, batch_size=100, max_files=1000):
-    """Fetch file info from a channel in batches"""
-    file_count = 0
-    files_data = []
-    last_msg_id = 0
-    
-    # Maximum messages to fetch (to prevent excessive API usage)
-    max_iterations = max_files // batch_size
-    
-    for _ in range(max_iterations):
-        try:
-            # Get messages from the channel in batches
-            messages = await bot.get_messages(
-                chat_id=channel_id,
-                offset_id=last_msg_id,
-                reverse=True,
-                limit=batch_size
-            )
-            
-            if not messages:
-                break
-            
-            last_msg_id = messages[-1].id
-            
-            for msg in messages:
-                if msg.media:
-                    # Process document, video, audio, etc.
-                    file_info = await process_media_message(msg)
-                    if file_info:
-                        files_data.append(file_info)
-                        file_count += 1
-            
-            # If we've reached the desired file count
-            if file_count >= max_files:
-                break
+                cursor = self.files.find()
                 
-        except FloodWait as e:
-            await asyncio.sleep(e.x)
+            # Apply limit if specified
+            if limit:
+                cursor = cursor.limit(limit)
+                
+            # Get all files
+            files = await cursor.to_list(length=10000)
+            
+            # Generate timestamp for filename
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            filename = f"{self.temp_dir}/export_{timestamp}.json"
+            
+            # Convert ObjectId to string for JSON serialization
+            for file in files:
+                if "_id" in file:
+                    file["_id"] = str(file["_id"])
+            
+            # Write to file
+            with open(filename, "w", encoding="utf-8") as f:
+                json.dump(files, f, indent=2, ensure_ascii=False)
+                
+            return {
+                "success": True,
+                "filename": filename,
+                "count": len(files)
+            }
         except Exception as e:
-            logging.error(f"Error fetching files from channel: {str(e)}")
-            break
-    
-    return files_data
-
-async def process_media_message(message):
-    """Extract file info from a media message"""
-    media = None
-    media_type = None
-    
-    # Check the type of media
-    if message.document:
-        media = message.document
-        media_type = "document"
-    elif message.video:
-        media = message.video
-        media_type = "video"
-    elif message.audio:
-        media = message.audio
-        media_type = "audio"
-    elif message.animation:
-        media = message.animation
-        media_type = "animation"
-    else:
-        return None
-    
-    # Extract file info
-    file_info = {
-        "file_id": media.file_id,
-        "file_name": getattr(media, "file_name", f"Unnamed {media_type}"),
-        "file_size": media.file_size,
-        "caption": message.caption.html if message.caption else None,
-        "mime_type": getattr(media, "mime_type", None),
-        "media_type": media_type,
-        "timestamp": datetime.datetime.now().timestamp()
-    }
-    
-    return file_info
-
-@Client.on_message(filters.command("batchchannel") & filters.user(ADMINS))
-async def batch_channel_import(bot, message):
-    """Import files from a channel in batch"""
-    # Check command format
-    if len(message.command) < 2:
-        await message.reply("Please provide a channel ID or username after the command.")
-        return
-    
-    channel_id = message.command[1]
-    max_files = 500  # Default
-    
-    if len(message.command) >= 3:
+            logger.error(f"Error exporting to JSON: {e}")
+            return {
+                "success": False,
+                "error": str(e)
+            }
+            
+    async def export_to_csv(self, query=None, limit=None, fields=None):
+        """Export files to CSV format"""
         try:
-            max_files = int(message.command[2])
-        except ValueError:
-            pass
-    
-    # Send initial message
-    status = await message.reply(f"Fetching up to {max_files} files from the channel. This may take some time...")
-    
-    try:
-        # Fetch files from the channel
-        files_data = await fetch_batch_file_info(bot, channel_id, max_files=max_files)
-        
-        if not files_data:
-            await status.edit_text("No media files found in the specified channel.")
-            return
-        
-        # Save to database
-        success_count = 0
-        error_count = 0
-        
-        for file_info in files_data:
-            try:
-                # Adapt the file info to match format expected by save_file
-                media_dict = {
-                    "file_id": file_info["file_id"],
-                    "file_name": file_info["file_name"],
-                    "file_size": file_info["file_size"],
-                    "caption": file_info["caption"]
+            # Get files based on query or get all
+            if query:
+                cursor = self.files.find(query)
+            else:
+                cursor = self.files.find()
+                
+            # Apply limit if specified
+            if limit:
+                cursor = cursor.limit(limit)
+                
+            # Get all files
+            files = await cursor.to_list(length=10000)
+            
+            # Generate timestamp for filename
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            filename = f"{self.temp_dir}/export_{timestamp}.csv"
+            
+            # Determine fields to export
+            if not fields:
+                # Use common fields if not specified
+                fields = ["file_id", "file_name", "size", "caption", "type", "year", "season", "episode"]
+            
+            # Write to CSV file
+            with open(filename, "w", newline="", encoding="utf-8") as f:
+                writer = csv.DictWriter(f, fieldnames=fields, extrasaction="ignore")
+                writer.writeheader()
+                
+                for file in files:
+                    # Convert ObjectId to string
+                    if "_id" in file and "_id" in fields:
+                        file["_id"] = str(file["_id"])
+                    writer.writerow(file)
+                
+            return {
+                "success": True,
+                "filename": filename,
+                "count": len(files)
+            }
+        except Exception as e:
+            logger.error(f"Error exporting to CSV: {e}")
+            return {
+                "success": False,
+                "error": str(e)
+            }
+            
+    async def import_from_json(self, filename, update_existing=False):
+        """Import files from JSON file"""
+        try:
+            # Read JSON file
+            with open(filename, "r", encoding="utf-8") as f:
+                files = json.load(f)
+                
+            if not isinstance(files, list):
+                return {
+                    "success": False,
+                    "error": "Invalid JSON format. Expected a list of files."
                 }
                 
-                # Use the existing save_file function
-                success, result = await save_file(media_dict)
-                if success:
-                    success_count += 1
-                else:
-                    error_count += 1
-            except Exception as e:
-                logging.error(f"Error saving file: {str(e)}")
-                error_count += 1
-        
-        await status.edit_text(f"Batch import completed: {success_count} files imported successfully, {error_count} errors.")
-    except Exception as e:
-        logging.error(f"Error in batch channel import: {str(e)}")
-        await status.edit_text(f"Error in batch import: {str(e)}")
-
-@Client.on_message(filters.command("bulkforward") & filters.user(ADMINS))
-async def bulk_forward(bot, message):
-    """Forward multiple files to a target channel"""
-    # Check command format
-    if len(message.command) < 3:
-        await message.reply("Usage: /bulkforward [source_channel_id] [target_channel_id] [count(optional)]")
-        return
-    
-    source_channel = message.command[1]
-    target_channel = message.command[2]
-    max_files = 100  # Default
-    
-    if len(message.command) >= 4:
-        try:
-            max_files = int(message.command[3])
-        except ValueError:
-            pass
-    
-    # Send initial message
-    status = await message.reply(f"Forwarding up to {max_files} files from {source_channel} to {target_channel}. This may take some time...")
-    
-    try:
-        # Get messages from the source channel
-        file_count = 0
-        last_msg_id = 0
-        
-        for _ in range((max_files // 100) + 1):
-            try:
-                # Get messages from the channel in batches
-                messages = await bot.get_messages(
-                    chat_id=source_channel,
-                    offset_id=last_msg_id,
-                    reverse=True,
-                    limit=100
-                )
+            # Track counts
+            imported = 0
+            skipped = 0
+            updated = 0
+            
+            # Process each file
+            for file in files:
+                # Skip if no file_id
+                if "file_id" not in file:
+                    skipped += 1
+                    continue
+                    
+                # Check if file exists
+                existing = await self.files.find_one({"file_id": file["file_id"]})
                 
-                if not messages:
-                    break
-                
-                last_msg_id = messages[-1].id
-                
-                for msg in messages:
-                    if msg.media:
-                        # Forward the message
-                        await bot.forward_messages(
-                            chat_id=target_channel,
-                            from_chat_id=source_channel,
-                            message_ids=msg.id
+                if existing:
+                    if update_existing:
+                        # Update existing file
+                        await self.files.update_one(
+                            {"file_id": file["file_id"]},
+                            {"$set": file}
                         )
-                        file_count += 1
-                        
-                        # Add a small delay to avoid hitting rate limits
-                        await asyncio.sleep(0.5)
+                        updated += 1
+                    else:
+                        skipped += 1
+                else:
+                    # Insert new file
+                    await self.files.insert_one(file)
+                    imported += 1
                     
-                    # If we've reached the desired file count
-                    if file_count >= max_files:
-                        break
+            return {
+                "success": True,
+                "imported": imported,
+                "updated": updated,
+                "skipped": skipped,
+                "total": len(files)
+            }
+        except Exception as e:
+            logger.error(f"Error importing from JSON: {e}")
+            return {
+                "success": False,
+                "error": str(e)
+            }
+            
+    async def import_from_csv(self, filename, update_existing=False):
+        """Import files from CSV file"""
+        try:
+            # Read CSV file
+            files = []
+            with open(filename, "r", encoding="utf-8") as f:
+                reader = csv.DictReader(f)
+                for row in reader:
+                    files.append(row)
+                    
+            # Track counts
+            imported = 0
+            skipped = 0
+            updated = 0
+            
+            # Process each file
+            for file in files:
+                # Skip if no file_id
+                if "file_id" not in file or not file["file_id"]:
+                    skipped += 1
+                    continue
+                    
+                # Convert empty strings to None
+                for key, value in file.items():
+                    if value == "":
+                        file[key] = None
+                    
+                # Check if file exists
+                existing = await self.files.find_one({"file_id": file["file_id"]})
                 
-                if file_count >= max_files:
-                    break
+                if existing:
+                    if update_existing:
+                        # Update existing file
+                        await self.files.update_one(
+                            {"file_id": file["file_id"]},
+                            {"$set": file}
+                        )
+                        updated += 1
+                    else:
+                        skipped += 1
+                else:
+                    # Insert new file
+                    await self.files.insert_one(file)
+                    imported += 1
                     
-            except FloodWait as e:
-                await asyncio.sleep(e.x)
-            except Exception as e:
-                logging.error(f"Error forwarding files: {str(e)}")
-                await status.edit_text(f"Error while forwarding: {str(e)}")
-                return
+            return {
+                "success": True,
+                "imported": imported,
+                "updated": updated,
+                "skipped": skipped,
+                "total": len(files)
+            }
+        except Exception as e:
+            logger.error(f"Error importing from CSV: {e}")
+            return {
+                "success": False,
+                "error": str(e)
+            }
+
+# Create global instance
+bulk_ops = BulkOperations()
+
+# Command handlers
+@MainBot.on_message(filters.command("export") & filters.user(ADMINS))
+async def export_command(client, message):
+    """Handle export command"""
+    try:
+        args = message.text.split()[1:] if len(message.text.split()) > 1 else []
         
-        await status.edit_text(f"Successfully forwarded {file_count} files to the target channel.")
+        # Parse arguments
+        format_type = "json"  # Default format
+        limit = 1000  # Default limit
+        
+        for arg in args:
+            if arg.startswith("format="):
+                format_type = arg.split("=")[1].lower()
+            elif arg.startswith("limit="):
+                try:
+                    limit = int(arg.split("=")[1])
+                except ValueError:
+                    await message.reply("Invalid limit value. Using default limit of 1000.")
+        
+        # Send initial message
+        status_msg = await message.reply(f"Exporting files to {format_type.upper()} format. Please wait...")
+        
+        # Perform export
+        if format_type == "json":
+            result = await bulk_ops.export_to_json(limit=limit)
+        elif format_type == "csv":
+            result = await bulk_ops.export_to_csv(limit=limit)
+        else:
+            await status_msg.edit(f"Unsupported format: {format_type}. Use 'json' or 'csv'.")
+            return
+            
+        # Check result
+        if result["success"]:
+            # Upload file to chat
+            await status_msg.edit(f"Export completed! Exported {result['count']} files. Uploading...")
+            
+            # Upload the file
+            await client.send_document(
+                chat_id=message.chat.id,
+                document=result["filename"],
+                caption=f"Exported {result['count']} files to {format_type.upper()} format."
+            )
+            
+            # Delete the temporary file
+            os.remove(result["filename"])
+            
+            await status_msg.edit("Export and upload completed!")
+        else:
+            await status_msg.edit(f"Export failed: {result['error']}")
     except Exception as e:
-        logging.error(f"Error in bulk forward operation: {str(e)}")
-        await status.edit_text(f"Error in bulk forward operation: {str(e)}") 
+        logger.error(f"Error in export command: {e}")
+        await message.reply(f"Error: {str(e)}")
+
+@MainBot.on_message(filters.command("import") & filters.user(ADMINS))
+async def import_command(client, message):
+    """Handle import command"""
+    try:
+        # Check if file is attached
+        if not message.reply_to_message or not message.reply_to_message.document:
+            await message.reply(
+                "Please reply to a JSON or CSV file to import.\n\n"
+                "Example: `/import update=true` (reply to a file)"
+            )
+            return
+            
+        # Parse arguments
+        args = message.text.split()[1:] if len(message.text.split()) > 1 else []
+        update_existing = False
+        
+        for arg in args:
+            if arg.lower() in ["update=true", "update=yes", "update"]:
+                update_existing = True
+        
+        # Get file info
+        doc = message.reply_to_message.document
+        file_name = doc.file_name
+        
+        # Check file extension
+        if not file_name.lower().endswith((".json", ".csv")):
+            await message.reply("Only JSON and CSV files are supported for import.")
+            return
+            
+        # Send initial message
+        status_msg = await message.reply(f"Downloading {file_name} for import...")
+        
+        # Download file
+        file_path = f"{bulk_ops.temp_dir}/{file_name}"
+        await message.reply_to_message.download(file_path)
+        
+        await status_msg.edit("File downloaded. Processing import...")
+        
+        # Perform import based on file type
+        if file_name.lower().endswith(".json"):
+            result = await bulk_ops.import_from_json(file_path, update_existing)
+        else:  # CSV
+            result = await bulk_ops.import_from_csv(file_path, update_existing)
+            
+        # Delete temporary file
+        os.remove(file_path)
+        
+        # Check result
+        if result["success"]:
+            msg = f"Import completed!\n\n"
+            msg += f"• Total files in import: {result['total']}\n"
+            msg += f"• New files imported: {result['imported']}\n"
+            
+            if update_existing:
+                msg += f"• Existing files updated: {result['updated']}\n"
+            
+            msg += f"• Files skipped: {result['skipped']}\n"
+            
+            await status_msg.edit(msg)
+        else:
+            await status_msg.edit(f"Import failed: {result['error']}")
+    except Exception as e:
+        logger.error(f"Error in import command: {e}")
+        await message.reply(f"Error: {str(e)}")
+
+@MainBot.on_message(filters.command("bulkdelete") & filters.user(ADMINS))
+async def bulk_delete_command(client, message):
+    """Handle bulk delete command"""
+    try:
+        args = message.text.split()[1:] if len(message.text.split()) > 1 else []
+        
+        if not args:
+            await message.reply(
+                "⚠️ This command will delete multiple files based on criteria.\n\n"
+                "Usage examples:\n"
+                "• `/bulkdelete type=movie year=2010` - Delete all movies from 2010\n"
+                "• `/bulkdelete quality=camrip` - Delete all CAMRip quality files\n"
+                "• `/bulkdelete confirm=true type=movie year=2010` - Delete without confirmation\n\n"
+                "⚠️ Add `confirm=true` to skip confirmation."
+            )
+            return
+            
+        # Parse arguments
+        query = {}
+        confirm = False
+        
+        for arg in args:
+            if "=" not in arg:
+                continue
+                
+            key, value = arg.split("=", 1)
+            
+            if key == "confirm" and value.lower() in ["true", "yes"]:
+                confirm = True
+            elif key in ["type", "year", "season", "episode", "quality"]:
+                query[key] = value
+                
+        # Check if we have a valid query
+        if not query:
+            await message.reply("No valid search criteria provided.")
+            return
+            
+        # Count matching files
+        count = await bulk_ops.files.count_documents(query)
+        
+        if count == 0:
+            await message.reply("No files match the specified criteria.")
+            return
+            
+        # Confirm deletion
+        if not confirm:
+            keyboard = InlineKeyboardMarkup([
+                [
+                    InlineKeyboardButton("Cancel", callback_data="bulk_delete_cancel"),
+                    InlineKeyboardButton("Confirm Delete", callback_data=f"bulk_delete_confirm_{json.dumps(query)}")
+                ]
+            ])
+            
+            await message.reply(
+                f"⚠️ You are about to delete {count} files matching these criteria:\n"
+                f"{json.dumps(query, indent=2)}\n\n"
+                f"Are you sure you want to continue?",
+                reply_markup=keyboard
+            )
+            return
+            
+        # Perform deletion
+        status_msg = await message.reply(f"Deleting {count} files...")
+        
+        result = await bulk_ops.files.delete_many(query)
+        
+        await status_msg.edit(f"Deleted {result.deleted_count} files matching the specified criteria.")
+    except Exception as e:
+        logger.error(f"Error in bulk delete command: {e}")
+        await message.reply(f"Error: {str(e)}")
+
+# Callback handlers
+@MainBot.on_callback_query(filters.regex(r"^bulk_delete_"))
+async def bulk_delete_callback(client, callback_query):
+    """Handle bulk delete confirmation callbacks"""
+    try:
+        action = callback_query.data.split("_", 3)[2]
+        
+        if action == "cancel":
+            await callback_query.message.edit("Bulk delete operation cancelled.")
+        elif action == "confirm":
+            # Parse the query
+            query_str = callback_query.data.split("_", 3)[3]
+            query = json.loads(query_str)
+            
+            # Update message
+            await callback_query.message.edit(f"Deleting files matching criteria... Please wait.")
+            
+            # Perform deletion
+            result = await bulk_ops.files.delete_many(query)
+            
+            # Update message with results
+            await callback_query.message.edit(f"Deleted {result.deleted_count} files matching the specified criteria.")
+    except Exception as e:
+        logger.error(f"Error in bulk delete callback: {e}")
+        await callback_query.answer(f"Error: {str(e)}", show_alert=True) 

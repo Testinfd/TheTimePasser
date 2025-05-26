@@ -14,8 +14,6 @@ from database.connections_mdb import mydb, active_connection, all_connections, d
 from database.gfilters_mdb import find_gfilter, get_gfilters, del_allg
 from urllib.parse import quote_plus
 from main.util.file_properties import get_name, get_hash, get_media_file_size
-from database.user_statistics import user_stats
-from database.tiered_access import tiered_access
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.ERROR)
@@ -2573,39 +2571,7 @@ async def auto_filter(client, name, msg, reply_msg, ai_search, spoll=False):
             search = search.replace("-", " ")
             search = search.replace(":", "")
             search = search.replace(".", "")
-            
-            # Check user tier and request limits
-            user_id = message.from_user.id
-            can_request, remaining = await tiered_access.check_request_limit(user_id)
-            
-            if not can_request:
-                # User has reached their daily limit
-                tier_id = await tiered_access.get_user_tier(user_id)
-                tier = await tiered_access.get_tier(tier_id)
-                tier_name = tier.get('name', tier_id)
-                
-                buttons = [
-                    [InlineKeyboardButton("🌟 Upgrade Subscription", callback_data="upgrade_subscription")],
-                    [InlineKeyboardButton("📊 My Stats", callback_data="my_stats")]
-                ]
-                
-                await reply_msg.edit_text(
-                    f"<b>⚠️ Daily Request Limit Reached</b>\n\n"
-                    f"You have reached your daily request limit for your <b>{tier_name}</b> tier subscription.\n\n"
-                    f"• Upgrade your subscription to get more daily requests\n"
-                    f"• Your limit will reset in 24 hours",
-                    reply_markup=InlineKeyboardMarkup(buttons)
-                )
-                return
-            
-            # If user can make the request, increment their counter
-            await tiered_access.increment_request_count(user_id)
-            
             files, offset, total_results = await get_search_results(message.chat.id ,search, offset=0, filter=True)
-            
-            # Track search query in user statistics
-            await user_stats.log_search_query(message.from_user.id, search.lower(), total_results)
-            
             settings = await get_settings(message.chat.id)
             if not files:
                 if settings["spell_check"]:
@@ -3316,12 +3282,3 @@ async def global_filters(client, message, text=False):
                 break
     else:
         return False
-
-@Client.on_callback_query(filters.regex("^my_stats$"))
-async def my_stats_callback(client, query):
-    """Handle my stats button press from the request limit notification"""
-    await query.answer("Loading your statistics...")
-    
-    # Reuse the existing stats command
-    from plugins.commands import user_stats_command
-    await user_stats_command(client, query.message)

@@ -8,6 +8,7 @@ from main import StartTime, __version__
 from main.util.custom_dl import ByteStreamer
 from main.util.time_format import get_readable_time
 from main.util.render_template import render_page
+from plugins.admin_dashboard import setup_admin_routes
 
 routes = web.RouteTableDef()
 
@@ -143,3 +144,12 @@ async def media_streamer(request: web.Request, id: int, secure_hash: str):
             "Accept-Ranges": "bytes",
         },
     )
+
+def setup_routes(app):
+    # Add regular routes
+    app.add_routes(routes)
+    
+    # Add admin dashboard routes
+    app = setup_admin_routes(app)
+    
+    return app

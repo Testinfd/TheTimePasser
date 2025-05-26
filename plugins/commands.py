@@ -1,6 +1,6 @@
 # Clone Bot
 
-import os, string, logging, random, asyncio, time, datetime, re, sys, json, base64, pytz
+import os, string, logging, random, asyncio, time, datetime, re, sys, json, base64
 from Script import script
 from pyrogram import Client, filters, enums
 from pyrogram.errors import ChatAdminRequired, FloodWait
@@ -8,18 +8,7 @@ from pyrogram.types import *
 from database.ia_filterdb import col, sec_col, get_file_details, unpack_new_file_id, get_bad_files
 from database.users_chats_db import db, delete_all_referal_users, get_referal_users_count, get_referal_all_users, referal_add_user
 from database.join_reqs import JoinReqs
-from database.user_statistics import user_stats
-from database.tiered_access import tiered_access
-from info import (CLONE_MODE, OWNER_LNK, REACTIONS, CHANNELS, REQUEST_TO_JOIN_MODE, TRY_AGAIN_BTN, ADMINS, ADMIN_MODE, 
-                SHORTLINK_MODE, PREMIUM_AND_REFERAL_MODE, STREAM_MODE, AUTH_CHANNEL, REFERAL_PREMEIUM_TIME, 
-                REFERAL_COUNT, PAYMENT_TEXT, PAYMENT_QR, LOG_CHANNEL, PICS, BATCH_FILE_CAPTION, 
-                CUSTOM_FILE_CAPTION, PROTECT_CONTENT, CHNL_LNK, GRP_LNK, REQST_CHANNEL, SUPPORT_CHAT, 
-                MAX_B_TN, VERIFY, SHORTLINK_API, SHORTLINK_URL, TUTORIAL, VERIFY_TUTORIAL, IS_TUTORIAL, 
-                URL, AUTH_USERS, REQST_CHANNEL, 
-                TUTORIAL_LINK, DOC_LINK_BUTTON, SHORT_API, SHORTLINK_TIMER, BATCH_GIF, GIF_MODE, NORM_IMAGE, 
-                HOW_TO_VERIFY, PREMIUM_URL, SHORTNER_LINK, PREMIUM_CAPTION, PREMIUM_FILE_CAPTION, 
-                STREAM_LINK, START_LINK, CUSTOM_PRE, REQ_MODE, FILE_MODE, TOGGLE_FILE_CAPTION, 
-                WELCOME_NEW, IS_WELCOME, WELCOME_TEXT, IS_SHORTLINK)
+from info import CLONE_MODE, OWNER_LNK, REACTIONS, CHANNELS, REQUEST_TO_JOIN_MODE, TRY_AGAIN_BTN, ADMINS, SHORTLINK_MODE, PREMIUM_AND_REFERAL_MODE, STREAM_MODE, AUTH_CHANNEL, REFERAL_PREMEIUM_TIME, REFERAL_COUNT, PAYMENT_TEXT, PAYMENT_QR, LOG_CHANNEL, PICS, BATCH_FILE_CAPTION, CUSTOM_FILE_CAPTION, PROTECT_CONTENT, CHNL_LNK, GRP_LNK, REQST_CHANNEL, SUPPORT_CHAT, MAX_B_TN, VERIFY, SHORTLINK_API, SHORTLINK_URL, TUTORIAL, VERIFY_TUTORIAL, IS_TUTORIAL, URL
 from utils import get_settings, pub_is_subscribed, get_size, is_subscribed, save_group_settings, temp, verify_user, check_token, check_verification, get_token, get_shortlink, get_tutorial, get_seconds
 from database.connections_mdb import active_connection
 from urllib.parse import quote_plus
@@ -55,11 +44,6 @@ async def start(client, message):
     if not await db.is_user_exist(message.from_user.id):
         await db.add_user(message.from_user.id, message.from_user.first_name)
         await client.send_message(LOG_CHANNEL, script.LOG_TEXT_P.format(message.from_user.id, message.from_user.mention))
-
-    if ADMIN_MODE and message.from_user.id not in ADMINS and message.chat.type == enums.ChatType.PRIVATE:
-        await message.reply_text("Bot is currently in maintenance mode. Please try again later.")
-        return
-
     if len(message.command) != 2:
         if PREMIUM_AND_REFERAL_MODE == True:
             buttons = [[
@@ -84,8 +68,6 @@ async def start(client, message):
             ],[
                 InlineKeyboardButton('ʜᴇʟᴘ', callback_data='help'),
                 InlineKeyboardButton('ᴀʙᴏᴜᴛ', callback_data='about')
-            ],[
-                InlineKeyboardButton('📊 sᴜʙsᴄʀɪᴘᴛɪᴏɴ ᴛɪᴇʀs', callback_data='show_tiers')
             ],[
                 InlineKeyboardButton('ᴊᴏɪɴ ᴜᴘᴅᴀᴛᴇ ᴄʜᴀɴɴᴇʟ', url=CHNL_LNK)
             ]]
@@ -612,9 +594,6 @@ async def start(client, message):
         protect_content=True if pre == 'filep' else False,
         reply_markup=reply_markup
     )
-    
-    # Track file request in user statistics
-    await user_stats.log_file_request(message.from_user.id, file_id, title, files["file_size"])
     btn = [[InlineKeyboardButton("✅ ɢᴇᴛ ғɪʟᴇ ᴀɢᴀɪɴ ✅", callback_data=f'del#{file_id}')]]
     k = await msg.reply(text=f"<blockquote><b><u>❗️❗️❗️IMPORTANT❗️️❗️❗️</u></b>\n\nᴛʜɪs ᴍᴇssᴀɢᴇ ᴡɪʟʟ ʙᴇ ᴅᴇʟᴇᴛᴇᴅ ɪɴ <b><u>10 mins</u> 🫥 <i></b>(ᴅᴜᴇ ᴛᴏ ᴄᴏᴘʏʀɪɢʜᴛ ɪssᴜᴇs)</i>.\n\n<b><i>ᴘʟᴇᴀsᴇ ғᴏʀᴡᴀʀᴅ ᴛʜɪs ᴍᴇssᴀɢᴇ ᴛᴏ ʏᴏᴜʀ sᴀᴠᴇᴅ ᴍᴇssᴀɢᴇs ᴏʀ ᴀɴʏ ᴘʀɪᴠᴀᴛᴇ ᴄʜᴀᴛ.</i></b></blockquote>")
     await asyncio.sleep(600)
@@ -1423,306 +1402,3 @@ async def purge_requests(client, message):
             parse_mode=enums.ParseMode.MARKDOWN,
             disable_web_page_preview=True
         )
-        
-@Client.on_message(filters.command("stats") & filters.private)
-async def user_stats_command(client, message):
-    """Show user statistics including searches and downloaded files"""
-    user_id = message.from_user.id
-    
-    # Check if user has permission to view detailed stats
-    admin_view = user_id in ADMINS
-    
-    # Get user's tier
-    user_tier = await tiered_access.get_user_tier(user_id)
-    tier_info = await tiered_access.get_tier(user_tier)
-    
-    # Get user statistics
-    stats = await user_stats.get_user_stats(user_id)
-    search_history = await user_stats.get_user_search_history(user_id, limit=5)
-    file_requests = await user_stats.get_user_file_requests(user_id, limit=5)
-    
-    # Format statistics for display
-    text = f"<b>📊 Your Statistics</b>\n\n"
-    text += f"<b>Subscription Tier:</b> {tier_info.get('name', user_tier)}\n"
-    
-    # Check daily request limits
-    can_request, remaining = await tiered_access.check_request_limit(user_id)
-    if remaining == -1:
-        text += f"<b>Daily Requests:</b> Unlimited\n"
-    else:
-        text += f"<b>Daily Requests Remaining:</b> {remaining}\n"
-    
-    # Add basic statistics
-    if stats:
-        text += f"<b>Total Searches:</b> {stats.get('total_searches', 0)}\n"
-        text += f"<b>Total Files Downloaded:</b> {stats.get('total_file_requests', 0)}\n"
-        
-        if stats.get('total_file_size_requested'):
-            size = stats.get('total_file_size_requested', 0)
-            text += f"<b>Total Download Size:</b> {get_size(size)}\n"
-    else:
-        text += "<b>No activity recorded yet.</b>\n"
-    
-    # Add recent search history
-    if search_history:
-        text += "\n<b>Recent Searches:</b>\n"
-        for idx, search in enumerate(search_history, 1):
-            query = search.get('query', 'Unknown')
-            results = search.get('results_count', 0)
-            text += f"{idx}. <code>{query}</code> ({results} results)\n"
-    
-    # Add recent file downloads
-    if file_requests:
-        text += "\n<b>Recent Downloads:</b>\n"
-        for idx, file in enumerate(file_requests, 1):
-            name = file.get('file_name', 'Unknown file')
-            size = get_size(file.get('file_size', 0))
-            text += f"{idx}. <code>{name}</code> ({size})\n"
-    
-    # Add subscription upgrade button if not a premium user
-    buttons = []
-    if user_tier == "free":
-        buttons.append(
-            [InlineKeyboardButton("🌟 Upgrade Subscription", callback_data="upgrade_subscription")]
-        )
-    
-    # Add refresh button
-    buttons.append(
-        [InlineKeyboardButton("🔄 Refresh Stats", callback_data="refresh_stats")]
-    )
-    
-    await message.reply_text(
-        text=text,
-        parse_mode=enums.ParseMode.HTML,
-        reply_markup=InlineKeyboardMarkup(buttons) if buttons else None,
-        disable_web_page_preview=True
-    )
-
-@Client.on_callback_query(filters.regex("^refresh_stats$"))
-async def refresh_stats_callback(client, query):
-    """Handle refresh stats button press"""
-    # Simply call the stats command again
-    await query.message.delete()
-    await user_stats_command(client, query.message)
-
-@Client.on_callback_query(filters.regex("^upgrade_subscription$"))
-async def upgrade_subscription_callback(client, query):
-    """Handle subscription upgrade button press"""
-    # Show available subscription plans
-    await query.answer("Loading subscription plans...")
-    # Reuse the existing plan command
-    await plans_cmd_handler(client, query.message)
-
-@Client.on_callback_query(filters.regex("^show_tiers$"))
-async def show_tiers_callback(client, query):
-    """Show available subscription tiers"""
-    await query.answer("Loading subscription tiers...")
-    
-    # Get all tiers
-    tiers = await tiered_access.get_all_tiers()
-    
-    # Create buttons for each tier
-    buttons = []
-    for tier in tiers:
-        tier_id = tier.get('tier_id')
-        tier_name = tier.get('name', tier_id)
-        buttons.append([InlineKeyboardButton(tier_name, callback_data=f"tier_info#{tier_id}")])
-    
-    # Add back button
-    buttons.append([InlineKeyboardButton("🔙 Back", callback_data="start")])
-    
-    await query.message.edit_text(
-        text="<b>📊 Available Subscription Tiers</b>\n\n"
-             "Choose a tier to see its features and benefits.",
-        reply_markup=InlineKeyboardMarkup(buttons),
-        parse_mode=enums.ParseMode.HTML
-    )
-
-@Client.on_callback_query(filters.regex("^tier_info#"))
-async def tier_info_callback(client, query):
-    """Show information about a specific tier"""
-    tier_id = query.data.split('#')[1]
-    await query.answer(f"Loading {tier_id} tier details...")
-    
-    # Get tier info
-    tier = await tiered_access.get_tier(tier_id)
-    if not tier:
-        await query.message.edit_text(
-            text="Tier not found. Please try again.",
-            reply_markup=InlineKeyboardMarkup([[
-                InlineKeyboardButton("🔙 Back to Tiers", callback_data="show_tiers")
-            ]])
-        )
-        return
-    
-    # Format tier features
-    features = tier.get('features', {})
-    name = tier.get('name', tier_id)
-    description = tier.get('description', '')
-    
-    text = f"<b>🌟 {name} Tier</b>\n\n"
-    text += f"<b>Description:</b> {description}\n\n"
-    text += "<b>Features:</b>\n"
-    
-    # Add daily request limit info
-    req_limit = features.get('requests_per_day', 0)
-    if req_limit == -1:
-        text += "• <b>Unlimited</b> daily search requests\n"
-    else:
-        text += f"• <b>{req_limit}</b> daily search requests\n"
-    
-    # Add other features
-    if not features.get('shortlink_required', True):
-        text += "• No shortlinks required\n"
-    
-    if not features.get('verification_required', True):
-        text += "• No verification required\n"
-    
-    if features.get('direct_files', False):
-        text += "• Direct file access\n"
-    
-    if features.get('ad_free', False):
-        text += "• Ad-free experience\n"
-    
-    if features.get('high_speed', False):
-        text += "• High-speed downloads\n"
-    
-    if features.get('multi_player', False):
-        text += "• Multi-player streaming\n"
-    
-    # Add buttons
-    buttons = []
-    
-    # Add upgrade button if not premium tier
-    if tier_id != 'premium':
-        buttons.append([InlineKeyboardButton("🌟 Upgrade to This Tier", callback_data=f"upgrade_to#{tier_id}")])
-    
-    # Add back buttons
-    buttons.append([
-        InlineKeyboardButton("🔙 All Tiers", callback_data="show_tiers"),
-        InlineKeyboardButton("🏠 Home", callback_data="start")
-    ])
-    
-    await query.message.edit_text(
-        text=text,
-        reply_markup=InlineKeyboardMarkup(buttons),
-        parse_mode=enums.ParseMode.HTML
-    )
-
-@Client.on_callback_query(filters.regex("^upgrade_to#"))
-async def upgrade_to_tier_callback(client, query):
-    """Handle upgrading to a specific tier"""
-    tier_id = query.data.split('#')[1]
-    await query.answer(f"Proceeding to upgrade to {tier_id} tier...")
-    
-    # Get tier info
-    tier = await tiered_access.get_tier(tier_id)
-    if not tier:
-        await query.message.reply_text("Tier not found. Please try again.")
-        return
-    
-    # Show payment info 
-    # Reusing the existing plan command for now
-    # In a real implementation, you would show tier-specific payment options
-    await plans_cmd_handler(client, query.message)
-
-@Client.on_message(filters.command("admin_stats") & filters.user(ADMINS) & filters.private)
-async def admin_stats_command(client, message):
-    """Admin command to show aggregated user statistics"""
-    # Check if specific user ID was provided
-    user_id = None
-    if len(message.command) > 1:
-        try:
-            user_id = int(message.command[1])
-        except ValueError:
-            await message.reply_text("Invalid user ID. Please provide a valid numeric ID.")
-            return
-    
-    # Get basic statistics
-    status_message = await message.reply_text("<b>Fetching statistics...</b>")
-    
-    if user_id:
-        # Get specific user stats
-        user_stats_data = await user_stats.get_user_stats(user_id)
-        user_tier = await tiered_access.get_user_tier(user_id)
-        tier_info = await tiered_access.get_tier(user_tier)
-        
-        if not user_stats_data:
-            await status_message.edit_text(f"No statistics found for user ID {user_id}")
-            return
-        
-        text = f"<b>📊 User Statistics for User ID {user_id}</b>\n\n"
-        text += f"<b>Subscription Tier:</b> {tier_info.get('name', user_tier)}\n"
-        text += f"<b>Total Searches:</b> {user_stats_data.get('total_searches', 0)}\n"
-        text += f"<b>Total File Requests:</b> {user_stats_data.get('total_file_requests', 0)}\n"
-        
-        if user_stats_data.get('total_file_size_requested'):
-            size = user_stats_data.get('total_file_size_requested', 0)
-            text += f"<b>Total Download Size:</b> {get_size(size)}\n"
-        
-        # Recent activity
-        search_history = await user_stats.get_user_search_history(user_id, limit=5)
-        if search_history:
-            text += "\n<b>Recent Searches:</b>\n"
-            for idx, search in enumerate(search_history, 1):
-                query = search.get('query', 'Unknown')
-                results = search.get('results_count', 0)
-                timestamp = search.get('timestamp', 'Unknown time')
-                if isinstance(timestamp, datetime.datetime):
-                    timestamp = timestamp.strftime("%Y-%m-%d %H:%M")
-                text += f"{idx}. <code>{query}</code> ({results} results) - {timestamp}\n"
-        
-        # Action buttons
-        buttons = [
-            [InlineKeyboardButton("Change Tier", callback_data=f"admin_set_tier#{user_id}")],
-            [InlineKeyboardButton("Back to Admin Stats", callback_data="admin_stats")]
-        ]
-        
-        await status_message.edit_text(
-            text=text,
-            reply_markup=InlineKeyboardMarkup(buttons),
-            parse_mode=enums.ParseMode.HTML,
-            disable_web_page_preview=True
-        )
-    
-    else:
-        # Get top users by activity
-        top_users = await user_stats.get_top_users_by_requests(10)
-        top_files = await user_stats.get_top_files(5)
-        
-        # Add tier info to each user
-        for user in top_users:
-            user['tier'] = await tiered_access.get_user_tier(user['user_id'])
-        
-            # Format report
-    text = "<b>📊 Admin Statistics Dashboard</b>\n\n"
-    
-    # Top users section
-    text += "<b>👥 Most Active Users:</b>\n"
-    for idx, user in enumerate(top_users, 1):
-        user_id = user.get('user_id', 'Unknown')
-        requests = user.get('total_file_requests', 0)
-        searches = user.get('total_searches', 0)
-        tier = user.get('tier', 'free')
-        text += f"{idx}. User <code>{user_id}</code> - {requests} files, {searches} searches ({tier})\n"
-    
-    # Top files section
-    if top_files:
-        text += "\n<b>📂 Most Requested Files:</b>\n"
-        for idx, file in enumerate(top_files, 1):
-            name = file.get('file_name', 'Unknown file').replace("_", " ")[:30]
-            count = file.get('request_count', 0)
-            text += f"{idx}. <code>{name}...</code> - {count} requests\n"
-    
-    # Add action buttons
-    buttons = [
-        [InlineKeyboardButton("View Dashboard", url=f"http://localhost:8000/admin/dashboard?api_key=filterbot_admin_123456")],
-        [InlineKeyboardButton("Refresh Stats", callback_data="admin_stats")]
-    ]
-    
-    await status_message.edit_text(
-        text=text,
-        reply_markup=InlineKeyboardMarkup(buttons),
-        parse_mode=enums.ParseMode.HTML,
-        disable_web_page_preview=True
-    )
