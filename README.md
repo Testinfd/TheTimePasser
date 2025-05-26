@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="https://commons.wikimedia.org/wiki/File:Artist%27s_impression_of_an_ultra-short-period_planet.jpg" alt="Filter Bot Logo" width="200">
+  <img src="https://upload.wikimedia.org/wikipedia/commons/9/98/SMP_May_2008-9a.jpg" alt="Filter Bot Logo" width="200">
 </p>
 <h1 align="center">
   THE FILTER BOT
