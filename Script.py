@@ -94,4 +94,24 @@ ID: {}</b>"""
     LOG_TEXT_G = """<b>#NEW_GROUP
 
 Group: {}
-ID: {}</b>""" 
+ID: {}</b>"""
+
+    # Adding missing attributes
+    SHORTLINK_INFO = """<b>📌 Shortlink Information
+
+To access the file, you need to:
+
+1. Click on the "Get Link" button below
+2. Navigate to the provided shortlink
+3. Wait for the countdown to complete
+4. Click "Continue" or "Go to Link"
+5. Return to the bot and click "Try Again"</b>"""
+
+    CUDNT_FND = """<b>Sorry, I couldn't find "{}" in my database.
+
+Please check the spelling or try searching with a different title.</b>"""
+
+    FILE_STORE_TXT = """<b>📂 File Store
+
+Use this feature to store and access files easily.
+Send any file and use the buttons below to manage it.</b>""" 

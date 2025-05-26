@@ -18,6 +18,24 @@
 An advanced auto-filter Telegram bot with many powerful features.
 </p>
 
+## 🔰 Making Your Bot Admin in Force Subscribe Channel
+
+To make your bot function properly with force subscribe feature, you need to add your bot as admin in the force subscribe channel with full admin rights. Here's how:
+
+1. Open your Telegram app and go to your force subscribe channel
+2. Click on the channel name at the top to access channel info
+3. Select "Administrators"
+4. Click "Add Admin" and search for your bot's username
+5. Enable all permissions for the bot, especially:
+   - Post Messages
+   - Edit Messages
+   - Delete Messages
+   - Restrict Members
+   - Invite Users via Link
+   - Add New Admins
+
+> ⚠️ **Important**: Without proper admin permissions, your force subscribe feature may not work correctly.
+
 ## ✨ Features
 
 <details>
