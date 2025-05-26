@@ -69,8 +69,12 @@ class TieredAccess:
         self.tiers = self.db.tiers
         
         # Initialize default tiers if they don't exist
-        self._init_default_tiers()
+        # self._init_default_tiers() # Removed from here
         
+    async def initialize(self):
+        """Asynchronously initialize the default tiers."""
+        await self._init_default_tiers()
+
     async def _init_default_tiers(self):
         """Initialize the default tiers in the database"""
         for tier_id, tier_data in DEFAULT_TIERS.items():

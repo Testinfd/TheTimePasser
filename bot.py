@@ -9,6 +9,7 @@ logging.getLogger("cinemagoer").setLevel(logging.ERROR)
 
 from pyrogram import Client, idle
 from database.users_chats_db import db
+from database.tiered_access import tiered_access
 from info import *
 from utils import temp
 from typing import Union, Optional, AsyncGenerator
@@ -29,6 +30,7 @@ loop = asyncio.get_event_loop()
 
 
 async def start():
+    await tiered_access.initialize()
     print('\n')
     print('Initalizing Your Bot')
     bot_info = await MainBot.get_me()
