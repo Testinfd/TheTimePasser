@@ -7,7 +7,7 @@ from datetime import datetime
 from pyrogram import Client, filters
 from pyrogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from main.bot import MainBot
-from info import ADMINS, DATABASE_NAME
+from info import ADMINS, DATABASE_NAME, OTHER_DB_URI
 from database.db_helpers import get_mongo_client, get_async_mongo_client
 from database.analytics import analytics_db
 
@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 class BulkOperations:
     def __init__(self):
         """Initialize bulk operations handler"""
-        self._client = get_async_mongo_client()
+        self._client = get_async_mongo_client(OTHER_DB_URI)
         self.db = self._client[DATABASE_NAME]
         self.files = self.db.files
         self.temp_dir = "temp_exports"
