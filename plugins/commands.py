@@ -10,12 +10,12 @@ from database.users_chats_db import db, delete_all_referal_users, get_referal_us
 from database.join_reqs import JoinReqs
 from database.user_statistics import user_stats
 from database.tiered_access import tiered_access
-from info import (CLONE_MODE, OWNER_LNK, REACTIONS, CHANNELS, REQUEST_TO_JOIN_MODE, TRY_AGAIN_BTN, ADMINS, 
+from info import (CLONE_MODE, OWNER_LNK, REACTIONS, CHANNELS, REQUEST_TO_JOIN_MODE, TRY_AGAIN_BTN, ADMINS, ADMIN_MODE, 
                 SHORTLINK_MODE, PREMIUM_AND_REFERAL_MODE, STREAM_MODE, AUTH_CHANNEL, REFERAL_PREMEIUM_TIME, 
                 REFERAL_COUNT, PAYMENT_TEXT, PAYMENT_QR, LOG_CHANNEL, PICS, BATCH_FILE_CAPTION, 
                 CUSTOM_FILE_CAPTION, PROTECT_CONTENT, CHNL_LNK, GRP_LNK, REQST_CHANNEL, SUPPORT_CHAT, 
                 MAX_B_TN, VERIFY, SHORTLINK_API, SHORTLINK_URL, TUTORIAL, VERIFY_TUTORIAL, IS_TUTORIAL, 
-                URL, AUTH_USERS, ADMIN_MODE, REQ_CHANNEL, REMOVE_SECONDS, UTUBE_THUMB, 
+                URL, AUTH_USERS, REQ_CHANNEL, REMOVE_SECONDS, UTUBE_THUMB, 
                 TUTORIAL_LINK, DOC_LINK_BUTTON, SHORT_API, SHORTLINK_TIMER, BATCH_GIF, GIF_MODE, NORM_IMAGE, 
                 HOW_TO_VERIFY, PREMIUM_URL, SHORTNER_LINK, PREMIUM_CAPTION, PREMIUM_FILE_CAPTION, 
                 STREAM_LINK, START_LINK, CUSTOM_PRE, REQ_MODE, FILE_MODE, TOGGLE_FILE_CAPTION, 
@@ -55,6 +55,11 @@ async def start(client, message):
     if not await db.is_user_exist(message.from_user.id):
         await db.add_user(message.from_user.id, message.from_user.first_name)
         await client.send_message(LOG_CHANNEL, script.LOG_TEXT_P.format(message.from_user.id, message.from_user.mention))
+
+    if ADMIN_MODE and message.from_user.id not in ADMINS and message.chat.type == enums.ChatType.PRIVATE:
+        await message.reply_text("Bot is currently in maintenance mode. Please try again later.")
+        return
+
     if len(message.command) != 2:
         if PREMIUM_AND_REFERAL_MODE == True:
             buttons = [[
